@@ -20,6 +20,7 @@
 #include <rtdk.h>
 #include <cmath>
 #include "drums.h"
+#include "settings.h"
 
 
 
@@ -39,7 +40,7 @@ int gIsPlaying = 0;			/* Whether we should play or not. Implement this in Step 4
  * holding each read pointer, the other saying which buffer
  * each read pointer corresponds to.
  */
-int gReadPointer = 0;
+int gReadPointer[SLOTS_SIZE] = {-1};
 
 /* Patterns indicate which drum(s) should play on which beat.
  * Each element of gPatterns is an array, whose length is given
@@ -81,6 +82,11 @@ int gShouldPlayFill = 0;
 int gPreviousPattern = 0;
 
 /* TODO: Declare any further global variables you need here */
+int gButtonPin[BUTTONS_SIZE]     = {BUTTON1_PIN, BUTTON2_PIN};
+int gButtonPressed[BUTTONS_SIZE] = {-1};
+RenderStates gStates[DRUMS_SIZE] = {STATE_WAIT};
+
+int gDrumBufferForReadPointer[SLOTS_SIZE] = {-1};
 
 // setup() is called once before the audio rendering starts.
 // Use it to perform any initialisation and allocation which is dependent
@@ -94,6 +100,16 @@ int gPreviousPattern = 0;
 bool setup(BeagleRTContext *context, void *userData)
 {
 	/* Step 2: initialise GPIO pins */
+	pinModeFrame(context, 0, BUTTON1_PIN, INPUT);
+	pinModeFrame(context, 0, BUTTON2_PIN, INPUT);
+
+	for(int i = 0; i < SLOTS_SIZE; i++) {
+		gDrumBufferForReadPointer[i] = -1;
+	}
+	for(int i = 0; i < BUTTONS_SIZE; i++) {
+		gButtonPressed[i] = -1;
+	}
+
 	return true;
 }
 
@@ -101,13 +117,68 @@ bool setup(BeagleRTContext *context, void *userData)
 // Input and output are given from the audio hardware and the other
 // ADCs and DACs (if available). If only audio is available, numMatrixFrames
 // will be 0.
-
 void render(BeagleRTContext *context, void *userData)
 {
 	/* TODO: your audio processing code goes here! */
+	float out = 0;
+	for(unsigned int n = 0; n < context->audioFrames; n++) {
+		
 
-	/* Step 2: use gReadPointer to play a drum sound */
+		// Loop through all gReadPointer slots and play the setted ones (when gReadPointers != -1)
+		for(int slot = 0; slot < SLOTS_SIZE; slot++) {
+			int drum  = 0;
 
+			// Check which button is pressed and play the associated drum
+			for(int i = 0; i < BUTTONS_SIZE; i++) {
+				gButtonPressed[i] = !digitalReadFrame(context, 0, gButtonPin[i]);
+				
+				if(gButtonPressed[i]) {
+		            gButtonPressed[i] = 0;
+		            startPlayingDrum(i);
+		        }
+			}
+
+			switch(gStates[slot]) {
+	            case STATE_WAIT:
+	                // If there is an associated drum buffer AND the read pointer is set to 0 (start to play), go to STATE_PLAYING
+	                if (gDrumBufferForReadPointer[slot] != -1 && gReadPointer[slot] >= 0) {
+	                    gStates[slot] = STATE_PLAYING;
+	                }
+	                break;
+
+	            case STATE_PLAYING:
+	            	// Get the setted drum (16 types)
+	                drum = gDrumBufferForReadPointer[slot];
+
+	                // If the gReadPointer reached the end (drum length), go to the STATE_END
+	                if (gReadPointer[slot] >= gDrumSampleBufferLengths[drum]) {
+	                    gStates[slot] = STATE_END;
+	                }
+
+	                // Output the drum
+	                out = gDrumSampleBuffers[drum][ gReadPointer[slot] ];
+	                for(unsigned int channel = 0; channel < context->audioChannels; channel++) {
+	                    context->audioOut[n * context->audioChannels + channel] += out;
+	                }
+
+	                // Increment the read pointer of this slot
+	                gReadPointer[slot]++;
+
+	                break;
+
+	            case STATE_END:
+	            	// Reset all pointers to initial values
+					rt_printf("readpointer value: %d | slot: %d\n", gReadPointer[slot], slot);
+	            	gReadPointer[slot] = -1;
+	            	gDrumBufferForReadPointer[slot] = -1;
+	            	gStates[slot] = STATE_WAIT;
+	        }
+		}
+
+		for(unsigned int channel = 0; channel < context->audioChannels; channel++) {
+            context->audioOut[n * context->audioChannels + channel] = context->audioOut[n * context->audioChannels + channel]/DRUMS_SIZE;
+        }
+	}
 	/* Step 3: use multiple read pointers to play multiple drums */
 
 	/* Step 4: count samples and decide when to trigger the next event */
@@ -116,7 +187,29 @@ void render(BeagleRTContext *context, void *userData)
 /* Start playing a particular drum sound given by drumIndex.
  */
 void startPlayingDrum(int drumIndex) {
-	/* TODO in Steps 3a and 3b */
+	// Get the first empty read pointer
+	int slot = -1;
+	for(int i = 0; i < SLOTS_SIZE; i++) {
+		if(gReadPointer[i] == -1) {
+			slot = i;
+			rt_printf("chosen slot: %d\n", slot);
+			break;
+		}
+	}
+
+	// No read pointer available
+	if(slot == -1) {
+		// rt_printf("No read pointer available\n");
+		return ;
+	}
+
+	// Reset gReadPointer
+	gReadPointer[slot] = 0;
+
+	// Which drum will be played
+	gDrumBufferForReadPointer[slot] = drumIndex;
+	
+
 }
 
 /* Start playing the next event in the pattern */
