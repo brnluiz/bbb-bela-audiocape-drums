@@ -7,7 +7,7 @@
 #define BUTTON1_PIN P8_07
 #define BUTTON2_PIN P8_08
 
-#define DRUMS_SIZE 16
+#define DRUMS_SIZE 8
 #define SLOTS_SIZE 16
 
 typedef enum {
