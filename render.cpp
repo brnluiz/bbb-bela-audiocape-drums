@@ -216,7 +216,22 @@ void startPlayingDrum(int drumIndex) {
 
 /* Start playing the next event in the pattern */
 void startNextEvent() {
-	startPlayingDrum(0);
+	// Reset the pattern index (start from the beginning again)
+	if(gCurrentIndexInPattern >= gPatternLengths[gCurrentPattern]) {
+		gCurrentIndexInPattern = 0;
+	}
+
+	int event = gPatterns[gCurrentPattern][gCurrentIndexInPattern];
+
+	// Check if the gPattern actual item have or not a valid drum
+	for(int drum = 0; drum < DRUMS_SIZE; drum++) {
+		// Play the configured pattern
+		if(eventContainsDrum(event, drum)) {
+			startPlayingDrum(drum);
+		}
+	}
+
+	gCurrentIndexInPattern++;
 }
 
 /* Returns whether the given event contains the given drum sound */
