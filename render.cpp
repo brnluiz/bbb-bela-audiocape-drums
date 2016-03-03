@@ -85,6 +85,7 @@ int gDrumBufferForReadPointer[SLOTS_SIZE] = {-1};
 
 float out[SLOTS_SIZE] = {0}; // Output array
 int gAudioFramesPerAnalogFrame;
+int gOrientation;
 // setup() is called once before the audio rendering starts.
 // Use it to perform any initialisation and allocation which is dependent
 // on the period size or sample rate.
@@ -103,11 +104,9 @@ bool setup(BeagleRTContext *context, void *userData)
 
 	for(int i = 0; i < SLOTS_SIZE; i++) {
 		gDrumBufferForReadPointer[i] = -1;
-	}
-	for(int i = 0; i < SLOTS_SIZE; i++) {
 		gReadPointer[i] = -1;
 	}
-	for(int i = 0; i < SLOTS_SIZE; i++) {
+	for(int i = 0; i < BUTTONS_SIZE; i++) {
 		gButtonPressed[i] = -1;
 	}
 
@@ -120,19 +119,27 @@ bool setup(BeagleRTContext *context, void *userData)
 // Input and output are given from the audio hardware and the other
 // ADCs and DACs (if available). If only audio is available, numMatrixFrames
 // will be 0.
+int counter = 0;
 void render(BeagleRTContext *context, void *userData)
 {
 	for(unsigned int n = 0; n < context->audioFrames; n++) {
 		
-		// Read button and toogle play state
-		gButtonPressed[0] = !digitalReadFrame(context, n, gButtonPin[0]);
-		if(gButtonPressed[0]) {
-			gIsPlaying = !gIsPlaying;
+		if(n == 0) {
+			// Read button and toogle play state
+			gButtonPressed[0] = !digitalReadFrame(context, n, gButtonPin[0]);
+			if(gButtonPressed[0]) {
+				gIsPlaying = !gIsPlaying;
+			}
+			// Read the accelerometer
+			gCurrentPattern = getOrientation(context, n);
 		}
 
 		// Read potentiometer and adjust the event interval accordingly
 		if(!(n % gAudioFramesPerAnalogFrame)) {
 			gEventInterval = potentiometer(context, n);
+		}
+
+		if(!(n % 44100%2)) {
 		}
 
 		// Start the next event depending on the gEventInterval setting (gEventCounter have to be = to gEventInterval)
@@ -221,6 +228,8 @@ void startNextEvent() {
 		gCurrentIndexInPattern = 0;
 	}
 
+	gCurrentPattern = gCurrentPattern % gPatternLengths[gCurrentPattern];
+
 	int event = gPatterns[gCurrentPattern][gCurrentIndexInPattern];
 
 	// Check if the gPattern actual item have or not a valid drum
@@ -239,22 +248,6 @@ int eventContainsDrum(int event, int drum) {
 	if(event & (1 << drum))
 		return 1;
 	return 0;
-}
-
-void led(BeagleRTContext *context, int status) {
-	if (status == GPIO_LOW) { //toggle the status
-		digitalWriteFrame(context, 0, LED_PIN, status); //write the status to the LED
-		status = GPIO_HIGH;
-	}
-	else {
-		digitalWriteFrame(context, 0, LED_PIN, status); //write the status to the LED
-		status = GPIO_LOW;
-	}
-}
-
-float potentiometer(BeagleRTContext *context, int n) {
-	float pot = analogReadFrame(context, n/gAudioFramesPerAnalogFrame, POT_PIN);
-	return map(pot, 0, .85, 0.05, 1);
 }
 
 // cleanup_render() is called once at the end, after the audio has stopped.
