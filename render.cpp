@@ -124,14 +124,12 @@ void render(BeagleRTContext *context, void *userData)
 {
 	for(unsigned int n = 0; n < context->audioFrames; n++) {
 		
+		// Read button and toogle play state
 		if(n == 0) {
-			// Read button and toogle play state
 			gButtonPressed[0] = !digitalReadFrame(context, n, gButtonPin[0]);
 			if(gButtonPressed[0]) {
 				gIsPlaying = !gIsPlaying;
 			}
-			// Read the accelerometer
-			gCurrentPattern = getOrientation(context, n);
 		}
 
 		// Read potentiometer and adjust the event interval accordingly
@@ -139,7 +137,16 @@ void render(BeagleRTContext *context, void *userData)
 			gEventInterval = potentiometer(context, n);
 		}
 
+		// Read the accelerometer
 		if(!(n % 44100%2)) {
+			int orientation = (int)getOrientation(context, n);
+			
+			if (orientation != REVERSE) {
+				gCurrentPattern = orientation;
+				gPlaysBackwards = false;
+			} else {
+				gPlaysBackwards = true;
+			}
 		}
 
 		// Start the next event depending on the gEventInterval setting (gEventCounter have to be = to gEventInterval)
@@ -154,6 +161,7 @@ void render(BeagleRTContext *context, void *userData)
 		// Loop through all gReadPointer slots and play the setted ones (when gReadPointer != -1)
 		for(int slot = 0; slot < SLOTS_SIZE; slot++) {
 			int drum = 0; // Will be used to store the drum that will be used
+			int pos  = 0;
 
 			switch(gStates[slot]) {
 	            case STATE_WAIT:
@@ -173,8 +181,14 @@ void render(BeagleRTContext *context, void *userData)
 	            	// Get the drum (8 available types)
 	                drum = gDrumBufferForReadPointer[slot];
 
+	                // Decide to play it normally or backwards (depends on the orientation)
+	                pos = gReadPointer[slot];
+	                if (gPlaysBackwards) {
+	                	pos = gDrumSampleBufferLengths[drum] - pos;
+	                }
+	                
 	                // Save the drum sample to the output variable
-	                out[slot] = gDrumSampleBuffers[drum][ gReadPointer[slot] ];
+	                out[slot] = gDrumSampleBuffers[drum][pos];
 
 	                // Increment the read pointer of this slot so the program can read the next samples
 	                gReadPointer[slot]++;

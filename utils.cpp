@@ -91,6 +91,8 @@ Orientation getOrientation(BeagleRTContext *context, int n) {
 		orientation = VERTICAL_FRONT;
 	} else if (z > threshold) {
 		orientation = RESTING;
+	} else if (z < -threshold) {
+		orientation = REVERSE;
 	} else {
 		// orientation = getOrientation(context, n);
 		orientation = RESTING;
