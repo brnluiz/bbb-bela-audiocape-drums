@@ -21,8 +21,7 @@
 #include <cmath>
 #include "drums.h"
 #include "settings.h"
-
-
+#include "utils.h"
 
 /* Variables which are given to you: */
 
@@ -55,16 +54,12 @@ extern int gPatternLengths[NUMBER_OF_PATTERNS];
 int gCurrentPattern = 0;
 int gCurrentIndexInPattern = 0;
 
-/* Triggers from buttons (step 2 etc.). Read these here and
- * do something if they are nonzero (resetting them when done). */
-int gTriggerButton1;
-int gTriggerButton2;
-
 /* This variable holds the interval between events in **milliseconds**
  * To use it (Step 4a), you will need to work out how many samples
  * it corresponds to.
  */
-int gEventIntervalMilliseconds = 250;
+float gEventInterval = 1;
+unsigned int gEventCounter = 0;
 
 /* This variable indicates whether samples should be triggered or
  * not. It is used in Step 4b, and should be set in gpio.cpp.
@@ -82,12 +77,14 @@ int gShouldPlayFill = 0;
 int gPreviousPattern = 0;
 
 /* TODO: Declare any further global variables you need here */
-int gButtonPin[BUTTONS_SIZE]     = {BUTTON1_PIN, BUTTON2_PIN};
-int gButtonPressed[BUTTONS_SIZE] = {-1};
-RenderStates gStates[DRUMS_SIZE] = {STATE_WAIT};
+int gButtonPin[BUTTONS_SIZE]     = {BUTTON1_PIN, BUTTON2_PIN}; // Stores the buttons pins specifications
+int gButtonPressed[BUTTONS_SIZE] = {-1}; // Stores the button pressed state
+RenderStates gStates[DRUMS_SIZE] = {STATE_WAIT}; // States for render() function
 
 int gDrumBufferForReadPointer[SLOTS_SIZE] = {-1};
 
+float out[SLOTS_SIZE] = {0}; // Output array
+int gAudioFramesPerAnalogFrame;
 // setup() is called once before the audio rendering starts.
 // Use it to perform any initialisation and allocation which is dependent
 // on the period size or sample rate.
@@ -102,6 +99,7 @@ bool setup(BeagleRTContext *context, void *userData)
 	/* Step 2: initialise GPIO pins */
 	pinModeFrame(context, 0, BUTTON1_PIN, INPUT);
 	pinModeFrame(context, 0, BUTTON2_PIN, INPUT);
+	pinModeFrame(context, 0, LED_PIN, OUTPUT);
 
 	for(int i = 0; i < SLOTS_SIZE; i++) {
 		gDrumBufferForReadPointer[i] = -1;
@@ -113,6 +111,8 @@ bool setup(BeagleRTContext *context, void *userData)
 		gButtonPressed[i] = -1;
 	}
 
+	gAudioFramesPerAnalogFrame = context->audioFrames / context->analogFrames;
+
 	return true;
 }
 
@@ -120,41 +120,40 @@ bool setup(BeagleRTContext *context, void *userData)
 // Input and output are given from the audio hardware and the other
 // ADCs and DACs (if available). If only audio is available, numMatrixFrames
 // will be 0.
-int debounce[2] = {0};
-int debounceCheck[2] = {0};
 void render(BeagleRTContext *context, void *userData)
 {
-	/* TODO: your audio processing code goes here! */
-
 	for(unsigned int n = 0; n < context->audioFrames; n++) {
-		float out[SLOTS_SIZE] = {0};
-		int drum = 0;
-
-		// Check which button is pressed and play the associated drum
-		for(int i = 0; i < BUTTONS_SIZE; i++) {
-			gButtonPressed[i] = !digitalReadFrame(context, 0, gButtonPin[i]);
-			
-			if(gButtonPressed[i] && debounceCheck[i] == 0) {
-	            gButtonPressed[i] = 0;
-	            rt_printf("Button %d pressed", i);
-	            debounceCheck[i] = 1;
-	            startPlayingDrum(i);
-	        }
-	        debounce[i]++;
-
-	        if(debounce[i] >= 1 * context->audioSampleRate) {
-	        	debounceCheck[i] = 0;
-	        }
+		
+		// Read button and toogle play state
+		gButtonPressed[0] = !digitalReadFrame(context, n, gButtonPin[0]);
+		if(gButtonPressed[0]) {
+			gIsPlaying = !gIsPlaying;
 		}
 
+		// Read potentiometer and adjust the event interval accordingly
+		if(!(n % gAudioFramesPerAnalogFrame)) {
+			gEventInterval = potentiometer(context, n);
+		}
+
+		// Start the next event depending on the gEventInterval setting (gEventCounter have to be = to gEventInterval)
+		if(gEventCounter >= gEventInterval * context->audioSampleRate) {
+			if (gIsPlaying) {
+				startNextEvent();
+			}
+			gEventCounter = 0;
+		}
+		gEventCounter++;
+		
 		// Loop through all gReadPointer slots and play the setted ones (when gReadPointer != -1)
 		for(int slot = 0; slot < SLOTS_SIZE; slot++) {
+			int drum = 0; // Will be used to store the drum that will be used
 
 			switch(gStates[slot]) {
 	            case STATE_WAIT:
 	                // If there is an associated drum buffer AND the read pointer is set to 0 (start to play), go to STATE_PLAYING
 	                if (gDrumBufferForReadPointer[slot] != -1 && gReadPointer[slot] >= 0) {
 	                    gStates[slot] = STATE_PLAYING;
+	                    led(context, GPIO_HIGH);
 	                }
 	                break;
 
@@ -164,26 +163,27 @@ void render(BeagleRTContext *context, void *userData)
 	                    gStates[slot] = STATE_END;
 	                }
 
-	            	// Get the setted drum (16 types)
+	            	// Get the drum (8 available types)
 	                drum = gDrumBufferForReadPointer[slot];
 
-	                // Output the drum
+	                // Save the drum sample to the output variable
 	                out[slot] = gDrumSampleBuffers[drum][ gReadPointer[slot] ];
 
-	                // Increment the read pointer of this slot
+	                // Increment the read pointer of this slot so the program can read the next samples
 	                gReadPointer[slot]++;
 
 	                break;
 
 	            case STATE_END:
-	            	// Reset all pointers to initial values
-					// rt_printf("readpointer value: %d | slot: %d\n", gReadPointer[slot], slot);
+	            	// Reset all needed variables to the initial values
 	            	gReadPointer[slot] = -1;
 	            	gDrumBufferForReadPointer[slot] = -1;
 	            	gStates[slot] = STATE_WAIT;
+	            	led(context, GPIO_LOW);
 	        }
 		}
 
+		// Mix all slots and output it to each channel
 		for(unsigned int channel = 0; channel < context->audioChannels; channel++) {
 			for(int slot = 0; slot < SLOTS_SIZE; slot++) {
 				context->audioOut[n * context->audioChannels + channel] += out[slot];
@@ -191,9 +191,6 @@ void render(BeagleRTContext *context, void *userData)
 			context->audioOut[n * context->audioChannels + channel] = context->audioOut[n * context->audioChannels + channel]/SLOTS_SIZE;
         }
 	}
-	/* Step 3: use multiple read pointers to play multiple drums */
-
-	/* Step 4: count samples and decide when to trigger the next event */
 }
 
 /* Start playing a particular drum sound given by drumIndex.
@@ -208,7 +205,7 @@ void startPlayingDrum(int drumIndex) {
 			// Reset gReadPointer
 			gReadPointer[i] = 0;
 
-			rt_printf("Chosen slot: %d\n", i);
+			// rt_printf("Chosen slot: %d\n", i);
 			return;
 		}
 	}
@@ -219,7 +216,7 @@ void startPlayingDrum(int drumIndex) {
 
 /* Start playing the next event in the pattern */
 void startNextEvent() {
-	/* TODO in Step 4 */
+	startPlayingDrum(0);
 }
 
 /* Returns whether the given event contains the given drum sound */
@@ -227,6 +224,22 @@ int eventContainsDrum(int event, int drum) {
 	if(event & (1 << drum))
 		return 1;
 	return 0;
+}
+
+void led(BeagleRTContext *context, int status) {
+	if (status == GPIO_LOW) { //toggle the status
+		digitalWriteFrame(context, 0, LED_PIN, status); //write the status to the LED
+		status = GPIO_HIGH;
+	}
+	else {
+		digitalWriteFrame(context, 0, LED_PIN, status); //write the status to the LED
+		status = GPIO_LOW;
+	}
+}
+
+float potentiometer(BeagleRTContext *context, int n) {
+	float pot = analogReadFrame(context, n/gAudioFramesPerAnalogFrame, POT_PIN);
+	return map(pot, 0, .85, 0.05, 1);
 }
 
 // cleanup_render() is called once at the end, after the audio has stopped.
