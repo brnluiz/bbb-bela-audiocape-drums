@@ -2,8 +2,9 @@
 #include <Utilities.h>
 #include "utils.h"
 #include "settings.h"
+#include "Filter.h"
 
-float acclMaxValue = 0, acclMinValue = 1;
+extern Filter *filter;
 
 void led(BeagleRTContext *context, int status) {
 	if (status == GPIO_LOW) { //toggle the status
@@ -22,23 +23,7 @@ float potentiometer(BeagleRTContext *context, int n) {
 	return map(input, 0, .85, 0.05, 1);
 }
 
-// void setupAcelerometer(BeagleRTContext *context, int n) {
-//     int audioFramesPerAnalogFrame = context->audioFrames / context->analogFrames;
-
-//     for (int i = 0; i < 100; i++) {
-//         for (int j = 0; j < 3; j++) {
-//             float input = analogReadFrame(context, n/audioFramesPerAnalogFrame, pin);
-//             if (input < acclMinValue) {
-//                 acclMinValue = input;
-//             }
-//             if (input > acclMaxValue) {
-//                 acclMaxValue = input;
-//             }
-//         }
-//     }
-// }
-
-float accelerometer(BeagleRTContext *context, int n, int direction) {
+float accelerometer(BeagleRTContext *context, int n, int direction, float minVal = .3, float maxVal = .55) {
 	int audioFramesPerAnalogFrame = context->audioFrames / context->analogFrames;
 	int pin;
 
@@ -53,7 +38,8 @@ float accelerometer(BeagleRTContext *context, int n, int direction) {
 	}
 
 	float input = analogReadFrame(context, n/audioFramesPerAnalogFrame, pin);
-	float mapped = map(input, .3, .55, -1, 1);
+	float mapped = map(input, minVal, maxVal, -1, 1);
+	
 	if(mapped > 1) {
 		mapped = 1;
 	}
@@ -99,4 +85,38 @@ Orientation getOrientation(BeagleRTContext *context, int n) {
 	}
 
 	return orientation;
+}
+
+bool getBoardTap(BeagleRTContext *context, int n) {
+	int axis = ACCL_Z_PIN;
+	const float threshold = 0.3;
+
+	Orientation orientation = getOrientation(context, n);
+	if (orientation ==  VERTICAL_RIGHT) {
+		axis = ACCL_X_PIN;
+	} else if (orientation == VERTICAL_LEFT) {
+		axis = ACCL_X_PIN;
+	} else if (orientation ==  VERTICAL_BACK) {
+		axis = ACCL_Y_PIN;
+	} else if (orientation == VERTICAL_FRONT) {
+		axis = ACCL_Y_PIN;
+	} else if (orientation == RESTING) {
+		axis = ACCL_Z_PIN;
+	} else if (orientation == REVERSE) {
+		axis = ACCL_Z_PIN;
+	} else {
+		return false;
+	}
+
+	int audioFramesPerAnalogFrame = context->audioFrames / context->analogFrames;
+	float input = analogReadFrame(context, n/audioFramesPerAnalogFrame, axis);
+	
+	float filtered = filter->run(input);
+
+	if (filtered > 0.3) {
+		// rt_printf("axis: %d | data: %f | filtered: %f\n", axis, input, filtered);
+		return true;
+	}
+
+	return false;
 }

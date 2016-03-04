@@ -3,6 +3,8 @@
 
 #include <BeagleRT.h>
 
+#define BEAGLERT_FREQ   44100.00
+
 // GPIO Configs
 #define BUTTONS_SIZE 2
 #define BUTTON1_PIN P8_07

@@ -22,6 +22,7 @@
 #include "drums.h"
 #include "settings.h"
 #include "utils.h"
+#include "Filter.h"
 
 /* Variables which are given to you: */
 
@@ -31,7 +32,9 @@
 extern float *gDrumSampleBuffers[NUMBER_OF_DRUMS];
 extern int gDrumSampleBufferLengths[NUMBER_OF_DRUMS];
 
-int gIsPlaying = 0;			/* Whether we should play or not. Implement this in Step 4b. */
+Filter *filter;
+
+int gIsPlaying = 1;			/* Whether we should play or not. Implement this in Step 4b. */
 
 /* Read pointer into the current drum sample buffer.
  *
@@ -73,8 +76,9 @@ int gPlaysBackwards = 0;
 /* For bonus step only: these variables help implement a fill
  * (temporary pattern) which is triggered by tapping the board.
  */
-int gShouldPlayFill = 0;
+bool gShouldPlayFill = false;
 int gPreviousPattern = 0;
+int gPreviousIndex   = 0;
 
 /* TODO: Declare any further global variables you need here */
 int gButtonPin[BUTTONS_SIZE]     = {BUTTON1_PIN, BUTTON2_PIN}; // Stores the buttons pins specifications
@@ -112,6 +116,8 @@ bool setup(BeagleRTContext *context, void *userData)
 
 	gAudioFramesPerAnalogFrame = context->audioFrames / context->analogFrames;
 
+	filter = new Filter(HIGH_PASS, 50);
+
 	return true;
 }
 
@@ -120,6 +126,7 @@ bool setup(BeagleRTContext *context, void *userData)
 // ADCs and DACs (if available). If only audio is available, numMatrixFrames
 // will be 0.
 int counter = 0;
+int initialFilter = 0;
 void render(BeagleRTContext *context, void *userData)
 {
 	for(unsigned int n = 0; n < context->audioFrames; n++) {
@@ -137,10 +144,25 @@ void render(BeagleRTContext *context, void *userData)
 			gEventInterval = potentiometer(context, n);
 		}
 
-		// Read the accelerometer
-		if(!(n % 44100%2)) {
+		// Check the board for taps... If a tap happened, then it will not check until next render() call
+		if(!gShouldPlayFill) {
+			if (getBoardTap(context, n) && initialFilter == 100) {
+				rt_printf("Fill!\n");
+				gShouldPlayFill = true;
+				gPreviousPattern = gCurrentPattern;
+				gPreviousIndex   = gCurrentIndexInPattern;
+				
+				gCurrentPattern = FILL_PATTERN;
+				gCurrentIndexInPattern = 0;
+			} else if (initialFilter < 100) {
+				initialFilter++;
+			}
+		}
+
+		// Read the accelerometer for the orientation
+		if(!(n % 100) && !gShouldPlayFill) {
 			int orientation = (int)getOrientation(context, n);
-			
+
 			if (orientation != REVERSE) {
 				gCurrentPattern = orientation;
 				gPlaysBackwards = false;
@@ -239,10 +261,19 @@ void startPlayingDrum(int drumIndex) {
 void startNextEvent() {
 	// Reset the pattern index (start from the beginning again)
 	if(gCurrentIndexInPattern >= gPatternLengths[gCurrentPattern]) {
-		gCurrentIndexInPattern = 0;
+		if (gShouldPlayFill) {
+			// rt_printf("shouldFill end | pattern: %d | gCurrentIndex: %d | Pattern Length: %d\n", gCurrentPattern, gCurrentIndexInPattern, gPatternLengths[gCurrentPattern]);
+			gCurrentPattern = gPreviousPattern;
+			gCurrentIndexInPattern = gPreviousIndex;
+			// rt_printf("shouldFill reset | pattern: %d | gCurrentIndex: %d | Pattern Length: %d\n", gCurrentPattern, gCurrentIndexInPattern, gPatternLengths[gCurrentPattern]);
+			gShouldPlayFill = false;
+		} else {
+			gCurrentIndexInPattern = 0;
+		}
 	}
 
-	gCurrentPattern = gCurrentPattern % gPatternLengths[gCurrentPattern];
+	// When the board orietation changes, check if the current index would not run out of boundaries
+	gCurrentIndexInPattern = gCurrentIndexInPattern % gPatternLengths[gCurrentPattern];
 
 	int event = gPatterns[gCurrentPattern][gCurrentIndexInPattern];
 
@@ -269,5 +300,5 @@ int eventContainsDrum(int event, int drum) {
 
 void cleanup(BeagleRTContext *context, void *userData)
 {
-
+	delete filter;
 }
