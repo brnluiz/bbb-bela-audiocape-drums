@@ -137,7 +137,6 @@ void initPatterns() {
 	int pattern3[32] = {0x81, 0x80, 0x80, 0x80, 0x01, 0x80, 0x80, 0x80, 0x81, 0, 0, 0, 0x41, 0x80, 0x80, 0x80,
 		0x81, 0x80, 0x80, 0, 0x41, 0, 0x80, 0x80, 0x81, 0x80, 0x80, 0x80, 0xC1, 0, 0, 0};
 	int pattern4[16] = {0x81, 0x02, 0, 0x81, 0x0A, 0, 0xA1, 0x10, 0xA2, 0x11, 0x46, 0x41, 0xC5, 0x81, 0x81, 0x89};
-	int pattern5[1] = {0x01};
 
 	gPatternLengths[0] = 16;
 	gPatterns[0] = (int *)malloc(gPatternLengths[0] * sizeof(int));
@@ -159,14 +158,15 @@ void initPatterns() {
 	gPatterns[4] = (int *)malloc(gPatternLengths[4] * sizeof(int));
 	memcpy(gPatterns[4], pattern4, gPatternLengths[4] * sizeof(int));
 
-	// gPatternLengths[5] = 16;
-	// gPatterns[5] = (int *)malloc(gPatternLengths[5] * sizeof(int));
-	// memcpy(gPatterns[5], pattern4, gPatternLengths[5] * sizeof(int));
+	gPatternLengths[5] = 16;
+	gPatterns[5] = (int *)malloc(gPatternLengths[5] * sizeof(int));
+	memcpy(gPatterns[5], pattern4, gPatternLengths[5] * sizeof(int));
 
 	// New Fill Pattern
-	gPatternLengths[5] = 1;
-	gPatterns[5] = (int *)malloc(gPatternLengths[5] * sizeof(int));
-	memcpy(gPatterns[5], pattern5, gPatternLengths[5] * sizeof(int));
+	// int pattern5[1] = {0x01};
+	// gPatternLengths[5] = 1;
+	// gPatterns[5] = (int *)malloc(gPatternLengths[5] * sizeof(int));
+	// memcpy(gPatterns[5], pattern5, gPatternLengths[5] * sizeof(int));
 }
 
 void cleanupPatterns() {

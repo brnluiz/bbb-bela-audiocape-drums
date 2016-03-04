@@ -78,7 +78,7 @@ int gPlaysBackwards = 0;
  */
 bool gShouldPlayFill = false;
 int gPreviousPattern = 0;
-int gPreviousIndex   = 0;
+int gPreviousIndex = 0;
 
 /* TODO: Declare any further global variables you need here */
 int gButtonPin[BUTTONS_SIZE]     = {BUTTON1_PIN, BUTTON2_PIN}; // Stores the buttons pins specifications
@@ -89,7 +89,7 @@ int gDrumBufferForReadPointer[SLOTS_SIZE] = {-1};
 
 float out[SLOTS_SIZE] = {0}; // Output array
 int gAudioFramesPerAnalogFrame;
-int gOrientation;
+int gOrientation = 0;
 // setup() is called once before the audio rendering starts.
 // Use it to perform any initialisation and allocation which is dependent
 // on the period size or sample rate.
@@ -126,7 +126,7 @@ bool setup(BeagleRTContext *context, void *userData)
 // ADCs and DACs (if available). If only audio is available, numMatrixFrames
 // will be 0.
 int counter = 0;
-int initialFilter = 0;
+int initFilter = 0;
 void render(BeagleRTContext *context, void *userData)
 {
 	for(unsigned int n = 0; n < context->audioFrames; n++) {
@@ -146,7 +146,7 @@ void render(BeagleRTContext *context, void *userData)
 
 		// Check the board for taps... If a tap happened, then it will not check until next render() call
 		if(!gShouldPlayFill) {
-			if (getBoardTap(context, n) && initialFilter == 100) {
+			if (getBoardTap(context, n) && initFilter == FILTER_INIT_SAMPLES) {
 				rt_printf("Fill!\n");
 				gShouldPlayFill = true;
 				gPreviousPattern = gCurrentPattern;
@@ -154,8 +154,8 @@ void render(BeagleRTContext *context, void *userData)
 				
 				gCurrentPattern = FILL_PATTERN;
 				gCurrentIndexInPattern = 0;
-			} else if (initialFilter < 100) {
-				initialFilter++;
+			} else if (initFilter < FILTER_INIT_SAMPLES) {
+				initFilter++;
 			}
 		}
 
@@ -267,6 +267,7 @@ void startNextEvent() {
 			gCurrentIndexInPattern = gPreviousIndex;
 			// rt_printf("shouldFill reset | pattern: %d | gCurrentIndex: %d | Pattern Length: %d\n", gCurrentPattern, gCurrentIndexInPattern, gPatternLengths[gCurrentPattern]);
 			gShouldPlayFill = false;
+			initFilter = 0;
 		} else {
 			gCurrentIndexInPattern = 0;
 		}
