@@ -103,7 +103,7 @@ bool getBoardTap(BeagleRTContext *context, int n) {
 	} else if (orientation == RESTING) {
 		axis = ACCL_Z_PIN;
 	} else if (orientation == REVERSE) {
-		axis = ACCL_Z_PIN;
+		return false;
 	} else {
 		return false;
 	}
@@ -113,8 +113,8 @@ bool getBoardTap(BeagleRTContext *context, int n) {
 	
 	float filtered = filter->run(input);
 
-	if (filtered > 0.3) {
-		// rt_printf("axis: %d | data: %f | filtered: %f\n", axis, input, filtered);
+	if (filtered > 0.2) {
+		rt_printf("axis: %d | data: %f | filtered: %f\n", axis, input, filtered);
 		return true;
 	}
 

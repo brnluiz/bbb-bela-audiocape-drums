@@ -116,7 +116,7 @@ bool setup(BeagleRTContext *context, void *userData)
 
 	gAudioFramesPerAnalogFrame = context->audioFrames / context->analogFrames;
 
-	filter = new Filter(HIGH_PASS, 50);
+	filter = new Filter(HIGH_PASS, TAP_FILTER_FREQ);
 
 	return true;
 }
@@ -147,7 +147,7 @@ void render(BeagleRTContext *context, void *userData)
 		// Check the board for taps... If a tap happened, then it will not check until next render() call
 		if(!gShouldPlayFill) {
 			if (getBoardTap(context, n) && initFilter == FILTER_INIT_SAMPLES) {
-				rt_printf("Fill!\n");
+				rt_printf("Fill! Orientation: %d\n", gOrientation);
 				gShouldPlayFill = true;
 				gPreviousPattern = gCurrentPattern;
 				gPreviousIndex   = gCurrentIndexInPattern;
