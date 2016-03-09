@@ -25,7 +25,7 @@
 #define DRUMS_SIZE 8
 #define SLOTS_SIZE 16
 
-#define TAP_FILTER_FREQ     100
+#define TAP_FILTER_FREQ     5000
 #define FILTER_INIT_SAMPLES 100
 
 // Render states
