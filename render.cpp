@@ -1,8 +1,4 @@
 /*
- * Student: Bruno Luiz da Silva
- * ID: 150724708
- */
-/*
  * assignment2_drums
  *
  * Second assignment for ECS732 RTDSP, to create a sequencer-based
@@ -92,12 +88,8 @@ RenderStates gStates[DRUMS_SIZE] = {STATE_WAIT}; // States for render() function
 int gDrumBufferForReadPointer[SLOTS_SIZE] = {-1};
 
 float out[SLOTS_SIZE] = {0}; // Output array
-int gAudioFramesPerAnalogFrame; // Save the audio x analog frame rate
-int gOrientation = 0; // Save the board orientation
-
-int counter = 0;    // Will be used to count when the interval ended (and when the next drum can be played)
-int initFilter = 0; // Used just to wait until the filter parameters are "normalized"
-
+int gAudioFramesPerAnalogFrame;
+int gOrientation = 0;
 // setup() is called once before the audio rendering starts.
 // Use it to perform any initialisation and allocation which is dependent
 // on the period size or sample rate.
@@ -109,12 +101,11 @@ int initFilter = 0; // Used just to wait until the filter parameters are "normal
 
 bool setup(BeagleRTContext *context, void *userData)
 {
-	// Initialize buttons and led
+	/* Step 2: initialise GPIO pins */
 	pinModeFrame(context, 0, BUTTON1_PIN, INPUT);
 	pinModeFrame(context, 0, BUTTON2_PIN, INPUT);
 	pinModeFrame(context, 0, LED_PIN, OUTPUT);
 
-	// Reset some variables
 	for(int i = 0; i < SLOTS_SIZE; i++) {
 		gDrumBufferForReadPointer[i] = -1;
 		gReadPointer[i] = -1;
@@ -123,10 +114,8 @@ bool setup(BeagleRTContext *context, void *userData)
 		gButtonPressed[i] = -1;
 	}
 
-	// Configure the audio frame x analog frames configs
 	gAudioFramesPerAnalogFrame = context->audioFrames / context->analogFrames;
 
-	// Instantiate the filter (required for the tap to fill feature)
 	filter = new Filter(HIGH_PASS, TAP_FILTER_FREQ);
 
 	return true;
@@ -136,12 +125,13 @@ bool setup(BeagleRTContext *context, void *userData)
 // Input and output are given from the audio hardware and the other
 // ADCs and DACs (if available). If only audio is available, numMatrixFrames
 // will be 0.
+int counter = 0;
+int initFilter = 0;
 void render(BeagleRTContext *context, void *userData)
 {
 	for(unsigned int n = 0; n < context->audioFrames; n++) {
 		
 		// Read button and toogle play state
-		// Interval: every 44100 samples (once in the loop)
 		if(n == 0) {
 			gButtonPressed[0] = !digitalReadFrame(context, n, gButtonPin[0]);
 			if(gButtonPressed[0]) {
@@ -150,14 +140,12 @@ void render(BeagleRTContext *context, void *userData)
 		}
 
 		// Read potentiometer and adjust the event interval accordingly
-		// Interval: audioSampleRate/2
 		if(!(n % gAudioFramesPerAnalogFrame)) {
 			gEventInterval = potentiometer(context, n);
 		}
 
 		// Check the board for taps... If a tap happened, then it will not check until next render() call
-		// Interval: every 100 samples
-		if(!(n % 100) && !gShouldPlayFill) {
+		if(!gShouldPlayFill) {
 			if (getBoardTap(context, n) && initFilter == FILTER_INIT_SAMPLES) {
 				rt_printf("Fill! Orientation: %d\n", gOrientation);
 				gShouldPlayFill = true;
@@ -170,12 +158,11 @@ void render(BeagleRTContext *context, void *userData)
 				initFilter++;
 			}
 		}
-	
-		// Read the accelerometer for the orientation, if up-side-down then reverse the playback
-		// Interval: every 100 samples
+
+		// Read the accelerometer for the orientation
 		if(!(n % 100) && !gShouldPlayFill) {
 			int orientation = (int)getOrientation(context, n);
-		
+
 			if (orientation != REVERSE) {
 				gCurrentPattern = orientation;
 				gPlaysBackwards = false;
@@ -184,7 +171,7 @@ void render(BeagleRTContext *context, void *userData)
 			}
 		}
 
-		// Start the next event depending on the gEventInterval setting (gEventCounter have to be == to gEventInterval)
+		// Start the next event depending on the gEventInterval setting (gEventCounter have to be = to gEventInterval)
 		if(gEventCounter >= gEventInterval * context->audioSampleRate) {
 			if (gIsPlaying) {
 				startNextEvent();
@@ -193,64 +180,58 @@ void render(BeagleRTContext *context, void *userData)
 		}
 		gEventCounter++;
 		
-		// DRUM PLAYER STATE MACHINE
-		drumPlayerManager(context);
+		// Loop through all gReadPointer slots and play the setted ones (when gReadPointer != -1)
+		for(int slot = 0; slot < SLOTS_SIZE; slot++) {
+			int drum = 0; // Will be used to store the drum that will be used
+			int pos  = 0;
 
-		// OUTPUT
+			switch(gStates[slot]) {
+	            case STATE_WAIT:
+	                // If there is an associated drum buffer AND the read pointer is set to 0 (start to play), go to STATE_PLAYING
+	                if (gDrumBufferForReadPointer[slot] != -1 && gReadPointer[slot] >= 0) {
+	                    gStates[slot] = STATE_PLAYING;
+	                    led(context, GPIO_HIGH);
+	                }
+	                break;
+
+	            case STATE_PLAYING:
+	                // If the gReadPointer reached the end (drum length), go to the STATE_END
+	                if (gReadPointer[slot] >= gDrumSampleBufferLengths[drum]) {
+	                    gStates[slot] = STATE_END;
+	                }
+
+	            	// Get the drum (8 available types)
+	                drum = gDrumBufferForReadPointer[slot];
+
+	                // Decide to play it normally or backwards (depends on the orientation)
+	                pos = gReadPointer[slot];
+	                if (gPlaysBackwards) {
+	                	pos = gDrumSampleBufferLengths[drum] - pos;
+	                }
+	                
+	                // Save the drum sample to the output variable
+	                out[slot] = gDrumSampleBuffers[drum][pos];
+
+	                // Increment the read pointer of this slot so the program can read the next samples
+	                gReadPointer[slot]++;
+
+	                break;
+
+	            case STATE_END:
+	            	// Reset all needed variables to the initial values
+	            	gReadPointer[slot] = -1;
+	            	gDrumBufferForReadPointer[slot] = -1;
+	            	gStates[slot] = STATE_WAIT;
+	            	led(context, GPIO_LOW);
+	        }
+		}
+
 		// Mix all slots and output it to each channel
 		for(unsigned int channel = 0; channel < context->audioChannels; channel++) {
 			for(int slot = 0; slot < SLOTS_SIZE; slot++) {
 				context->audioOut[n * context->audioChannels + channel] += out[slot];
 			}
 			context->audioOut[n * context->audioChannels + channel] = context->audioOut[n * context->audioChannels + channel]/SLOTS_SIZE;
-        }
-	}
-}
-
-void drumPlayerManager(BeagleRTContext *context) {
-	// Loop through all gReadPointer slots and play the setted ones (when gReadPointer != -1)
-	for(int slot = 0; slot < SLOTS_SIZE; slot++) {
-		int drum = 0; // Will be used to store the drum that will be used
-		int pos  = 0;
-
-		switch(gStates[slot]) {
-            case STATE_WAIT:
-                // If there is an associated drum buffer AND the read pointer is set to 0 (start to play), go to STATE_PLAYING
-                if (gDrumBufferForReadPointer[slot] != -1 && gReadPointer[slot] >= 0) {
-                    gStates[slot] = STATE_PLAYING;
-                    led(context, GPIO_HIGH);
-                }
-                break;
-
-            case STATE_PLAYING:
-                // If the gReadPointer reached the end (drum length), go to the STATE_END
-                if (gReadPointer[slot] >= gDrumSampleBufferLengths[drum]) {
-                    gStates[slot] = STATE_END;
-                }
-
-            	// Get the drum (8 available types)
-                drum = gDrumBufferForReadPointer[slot];
-
-                // Decide to play it normally or backwards (depends on the orientation)
-                pos = gReadPointer[slot];
-                if (gPlaysBackwards) {
-                	pos = gDrumSampleBufferLengths[drum] - pos;
-                }
-                
-                // Save the drum sample to the output variable
-                out[slot] = gDrumSampleBuffers[drum][pos];
-
-                // Increment the read pointer of this slot so the program can read the next samples
-                gReadPointer[slot]++;
-
-                break;
-
-            case STATE_END:
-            	// Reset all needed variables to the initial values
-            	gReadPointer[slot] = -1;
-            	gDrumBufferForReadPointer[slot] = -1;
-            	gStates[slot] = STATE_WAIT;
-            	led(context, GPIO_LOW);
         }
 	}
 }
@@ -273,7 +254,7 @@ void startPlayingDrum(int drumIndex) {
 	}
 
 	// No read pointer available
-	rt_printf("No read pointer available\n");
+	// rt_printf("No read pointer available\n");
 }
 
 /* Start playing the next event in the pattern */
