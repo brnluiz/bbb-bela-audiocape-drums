@@ -1,3 +1,7 @@
+/*
+ * Student: Bruno Luiz da Silva
+ * ID: 150724708
+ */
 #include <BeagleRT.h>
 #include <Utilities.h>
 #include "utils.h"
@@ -89,7 +93,7 @@ Orientation getOrientation(BeagleRTContext *context, int n) {
 
 bool getBoardTap(BeagleRTContext *context, int n) {
 	int axis = ACCL_Z_PIN;
-	const float threshold = 0.3;
+	const float threshold = 0.2;
 
 	Orientation orientation = getOrientation(context, n);
 	if (orientation ==  VERTICAL_RIGHT) {
@@ -113,7 +117,7 @@ bool getBoardTap(BeagleRTContext *context, int n) {
 	
 	float filtered = filter->run(input);
 
-	if (filtered > 0.2) {
+	if (filtered > threshold) {
 		rt_printf("axis: %d | data: %f | filtered: %f\n", axis, input, filtered);
 		return true;
 	}

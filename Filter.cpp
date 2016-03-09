@@ -1,3 +1,7 @@
+/*
+ * Student: Bruno Luiz da Silva
+ * ID: 150724708
+ */
 #include <BeagleRT.h>
 #include "Filter.h"
 #include "settings.h"

@@ -1,3 +1,7 @@
+/*
+ * Student: Bruno Luiz da Silva
+ * ID: 150724708
+ */
 #ifndef SETTINGS_H
 #define SETTINGS_H
 

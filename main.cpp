@@ -1,4 +1,8 @@
 /*
+ * Student: Bruno Luiz da Silva
+ * ID: 150724708
+ */
+/*
  * assignment2_drums
  *
  * Second assignment for ECS732 RTDSP, to create a sequencer-based
