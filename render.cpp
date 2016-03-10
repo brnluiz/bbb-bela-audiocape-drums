@@ -142,22 +142,23 @@ void render(BeagleRTContext *context, void *userData)
 		// Read potentiometer and adjust the event interval accordingly
 		if(!(n % gAudioFramesPerAnalogFrame)) {
 			gEventInterval = potentiometer(context, n);
-		}
-
-		// Check the board for taps... If a tap happened, then it will not check until next render() call
-		if(!gShouldPlayFill) {
-			if (getBoardTap(context, n) && initFilter == FILTER_INIT_SAMPLES) {
-				rt_printf("Fill! Orientation: %d\n", gOrientation);
-				gShouldPlayFill = true;
-				gPreviousPattern = gCurrentPattern;
-				gPreviousIndex   = gCurrentIndexInPattern;
-				
-				gCurrentPattern = FILL_PATTERN;
-				gCurrentIndexInPattern = 0;
-			} else if (initFilter < FILTER_INIT_SAMPLES) {
-				initFilter++;
+			
+			// Check the board for taps... If a tap happened, then it will not check until next render() call
+			if(!gShouldPlayFill) {
+				if (getBoardTap(context, n) && initFilter == FILTER_INIT_SAMPLES) {
+					rt_printf("Fill! Orientation: %d\n", gOrientation);
+					gShouldPlayFill = true;
+					gPreviousPattern = gCurrentPattern;
+					gPreviousIndex   = gCurrentIndexInPattern;
+					
+					gCurrentPattern = FILL_PATTERN;
+					gCurrentIndexInPattern = 0;
+				} else if (initFilter < FILTER_INIT_SAMPLES) {
+					initFilter++;
+				}
 			}
 		}
+
 
 		// Read the accelerometer for the orientation
 		if(!(n % 100) && !gShouldPlayFill) {
